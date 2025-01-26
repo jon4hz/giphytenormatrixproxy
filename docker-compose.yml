@@ -1,0 +1,27 @@
+services:
+    giphytenormatrixproxy:
+        image: ${PROXY_IMAGE:-giphytenormatrixproxy}
+        container_name: ${CONTAINER_NAME:-giphytenormatrixproxy}
+        build:
+            context: ${BUILD_CONTEXT:-./matrix/build/giphytenormatrixproxy}
+            dockerfile: Dockerfile
+        environment:
+            TZ: ${TIMEZONE:-UTC}
+        networks:
+            - ${NETWORK_NAME:-matrix}
+        volumes:
+            - ${CONFIG_PATH:-./matrix/giphytenormatrixproxy/config.yaml}:/data/config.yaml
+            - ${STORAGE_PATH:-./matrix/giphytenormatrixproxy/storage}:/storage
+        restart: on-failure
+        labels:
+            traefik.enable: true
+            traefik.http.routers.${CONTAINER_NAME:-giphytenormatrixproxy}.rule: Host(`${MATRIX_MEDIA_DOMAIN}`)
+            traefik.http.routers.${CONTAINER_NAME:-giphytenormatrixproxy}.entrypoints: websecure
+            traefik.http.routers.${CONTAINER_NAME:-giphytenormatrixproxy}.tls: true
+            traefik.http.routers.${CONTAINER_NAME:-giphytenormatrixproxy}.tls.certresolver: ${CERT_RESOLVER:-le}
+            traefik.http.routers.${CONTAINER_NAME:-giphytenormatrixproxy}.service: ${CONTAINER_NAME:-giphytenormatrixproxy}-service
+            traefik.http.services.${CONTAINER_NAME:-giphytenormatrixproxy}-service.loadbalancer.server.port: ${PROXY_PORT:-8008}
+
+networks:
+    matrix:
+        name: ${NETWORK_NAME:-matrix}

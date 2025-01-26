@@ -1,0 +1,334 @@
+@keyframes wave {
+
+    0%,
+    to {
+        transform: rotate(-5deg)
+    }
+
+    50% {
+        transform: rotate(5deg)
+    }
+}
+
+:root[data-theme=light] {
+    --bg-color: #f4f4f4;
+    --text-color: #000000;
+    --input-border: #ccc;
+    --menu-active-bg: #645a8d;
+    --menu-active-fg: #ffffff;
+    --tab-bg: #f2f5f8;
+    --tab-active-bg: #f4f4f4;
+    --tab-border: #ccc;
+    --giphy-logo: "https://upload.wikimedia.org/wikipedia/commons/5/57/Poweredby_100px-Black_VertLogo.png"
+}
+
+:root[data-theme=dark] {
+    --bg-color: #050505;
+    --text-color: #ffffff;
+    --input-border: #444;
+    --menu-active-bg: #645a8d;
+    --menu-active-fg: #ffffff;
+    --tab-bg: #1d1f24;
+    --tab-active-bg: #1a1a1a;
+    --tab-border: #444;
+    --giphy-logo: "https://upload.wikimedia.org/wikipedia/commons/5/57/Poweredby_100px-White_VertLogo.png"
+}
+
+body {
+    font-family: Arial, sans-serif;
+    font-size: 80%;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    position: relative;
+}
+
+.bottom-hover-area {
+    pointer-events: none
+}
+
+.bottom-bar .settings-container,
+.bottom-bar button {
+    pointer-events: auto
+}
+
+.settings-menu label {
+    display: inline-flex;
+    align-items: center;
+}
+
+.tab-container {
+    margin: 0;
+    padding-top: 4px;
+    border-bottom: 1px solid var(--tab-border)
+}
+
+.tab-container,
+.title-container {
+    display: flex;
+    width: 100%;
+    justify-content: center;
+    background-color: var(--tab-bg)
+}
+
+.search-container {
+    justify-content: center;
+    padding: 5px
+}
+
+.tab,
+.tab.active {
+    border-bottom: none
+}
+
+.tab {
+    padding: 4px 12px;
+    cursor: pointer;
+    border: 1px solid var(--tab-border);
+    border-bottom: none;
+    background-color: var(--tab-bg);
+    color: var(--text-color);
+    margin: 0 2px;
+    border-radius: 6px 6px 0 0;
+    font-size: 13px;
+    transition: background-color .2s
+}
+
+.tab.active {
+    background-color: var(--bg-color);
+    position: relative
+}
+
+.tab.active::after {
+    content: "";
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 1px
+}
+
+.pack-list {
+    margin-top: 20px
+}
+
+.sticker-list {
+    column-count: var(--grid-columns, 2);
+    column-gap: 10px;
+    margin-top: 10px;
+    width: 100%;
+}
+
+.sticker {
+    break-inside: avoid;
+    margin-bottom: 10px;
+    cursor: pointer;
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden;
+    display: inline-block;
+    width: 100%;
+}
+
+.sticker img {
+    width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 8px
+}
+
+.sticker img:hover {
+    transform: scale(1.01);
+    box-shadow: 0 0 10px 4px rgba(0, 0, 255, .6);
+    transition: box-shadow .3s ease-in-out
+}
+
+.use-count {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 4px 8px;
+    font-size: 12px;
+    border-radius: 12px;
+    backdrop-filter: blur(4px);
+}
+
+.error {
+    color: red;
+    font-size: 14px
+}
+
+.bottom-bar button,
+input[type=text] {
+    padding: 7px;
+    border-radius: 5px;
+    color: var(--text-color)
+}
+
+.bottom-bar,
+input[type=text] {
+    width: 100%;
+    box-sizing: border-box
+}
+
+input[type=text] {
+    font-size: 16px;
+    border: 1px solid var(--input-border);
+    background-color: var(--bg-color)
+}
+
+#app {
+    width: 100%
+}
+
+.bottom-bar {
+    position: fixed;
+    bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 10px;
+    opacity: 0;
+    transition: opacity .3s;
+    pointer-events: none
+}
+
+.bottom-hover-area {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 40px;
+    z-index: 100
+}
+
+.bottom-bar.visible,
+.bottom-bar:hover,
+.bottom-hover-area:hover+.bottom-bar {
+    opacity: 1;
+    pointer-events: auto
+}
+
+.bottom-bar button {
+    font-size: 14px;
+    border: 0;
+    background-color: var(--tab-bg);
+    cursor: pointer;
+    transition: background-color .2s
+}
+
+.bottom-bar button:hover,
+.tab.active::after {
+    background-color: var(--tab-active-bg)
+}
+
+.context-menu {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, .2);
+    pointer-events: auto;
+}
+
+.context-menu-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    color: var(--text-color);
+}
+
+.context-menu-item:hover {
+    background-color: var(--menu-active-bg);
+    color: var(--menu-active-fg);
+}
+
+.has-submenu {
+    position: relative;
+}
+
+.submenu {
+    display: none;
+    position: absolute;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    padding: 4px;
+}
+
+.has-submenu:hover .submenu {
+    display: block;
+}
+
+.submenu-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+}
+
+.submenu-grid .context-menu-item {
+    padding: 4px 8px;
+    text-align: center;
+    min-width: 40px;
+    font-size: 0.9em;
+}
+
+/* Position submenu above if not enough space below */
+.submenu-top {
+    bottom: 100%;
+    left: 0;
+}
+
+/* Position submenu to the left if not enough space on right */
+.submenu-left {
+    right: 100%;
+    left: auto;
+}
+
+.settings-container {
+    position: relative
+}
+
+.settings-menu {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    background-color: var(--tab-bg);
+    border-radius: 5px;
+    padding: 10px;
+    margin-bottom: 10px;
+    display: none
+}
+
+.settings-container::after,
+.settings-menu::after {
+    content: "";
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    right: 0;
+    height: 20px
+}
+
+.settings-menu::after {
+    bottom: -20px
+}
+
+.settings-container:hover .settings-menu {
+    display: block
+}
+
+.title {
+    font-family: "Comic Sans MS", cursive, sans-serif;
+    font-size: 20px;
+    margin-top: 6px;
+    animation: wave 6s infinite
+}

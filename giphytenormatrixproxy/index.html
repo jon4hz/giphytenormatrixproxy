@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GIF Search Tabs</title>
+  <script src="https://unpkg.com/htm/preact/standalone.module.js" type="module"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+  <div class="title-container">
+    <div class="title">PiX's finest GIF picker</div>
+  </div>
+  <div id="app"></div>
+  <div class="bottom-hover-area"></div>
+  <div class="bottom-bar" id="bottomBar">
+    <div class="settings-container">
+      <button id="settingsBtn">⚙️</button>
+      <div class="settings-menu">
+        <label>
+          <input type="checkbox" id="columnToggle">
+          Single&nbsp;Column
+        </label>
+        <label>
+          <input type="checkbox" id="askSizeToggle">
+          Ask for size
+        </label>
+      </div>
+    </div>
+    <button id="scrollToTopBtn">Scroll to Top</button>
+  </div>
+  <div id="contextMenu" class="context-menu">
+    <div class="context-menu-item" id="copyMarkdown">Copy mxc:// markdown</div>
+    <div class="context-menu-item" id="copyHtml">Copy mxc:// HTML</div>
+    <div class="context-menu-item" id="copyGifUrl">Copy GIF real URL</div>
+    <div class="context-menu-item" id="sendAsEmoji">Send</div>
+    <div class="context-menu-item" id="deleteHistory" style="display: none">Delete from history</div>
+  </div>
+  <div id="sizeMenu" class="context-menu size-menu">
+    <div class="size-grid">
+      <div class="context-menu-item" data-size="original"><small>Original</small></div>
+      <div class="context-menu-item" data-size="512"><small>512px</small></div>
+      <div class="context-menu-item" data-size="320"><small>320px</small></div>
+      <div class="context-menu-item" data-size="240"><small>240px</small></div>
+      <div class="context-menu-item" data-size="160"><small>160px</small></div>
+      <div class="context-menu-item" data-size="80"><small>80px</small></div>
+      <div class="context-menu-item" data-size="64"><small>64px</small></div>
+      <div class="context-menu-item" data-size="32"><small>32px</small></div>
+      <div class="context-menu-item" data-size="24"><small>24px</small></div>
+    </div>
+  </div>
+
+  <style>
+    .context-menu {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      background: var(--bg-color);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    }
+
+    .size-menu {
+      padding: 4px;
+    }
+
+    .size-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 2px;
+    }
+
+    .size-grid .context-menu-item {
+      padding: 4px 8px;
+      text-align: center;
+      min-width: 40px;
+      font-size: 0.9em;
+    }
+
+    .context-menu-item {
+      padding: 8px 12px;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+      color: var(--text-color);
+    }
+
+    .context-menu-item:hover {
+      background-color: var(--menu-active-bg);
+      color: var(--menu-active-fg);
+    }
+  </style>
+
+  <script type="module">
+    import { h, render, Component } from "https://unpkg.com/htm/preact/standalone.module.js";
+
+    // Check if template variables are unrendered (still contain {{.}})
+    var SERVER_NAME = "{{.ServerName}}";
+    var GIPHY_API_KEY = "{{.GiphyAPIKey}}";
+    var TENOR_API_KEY = "{{.TenorAPIKey}}";
+    var HAS_LOCAL_FILES = {{.HasLocalFiles }};
+    var HAS_GIPHY_KEY = {{.HasGiphyKey}};
+    var HAS_TENOR_KEY = {{.HasTenorKey}};
+    var LOCAL_API_BEARER = "{{.LocalAPIBearer}}";
+    var GIF_PATH = "{{.GifPath}}";
+    var LOCALE = "{{.Locale}}";
+
+    var COUNTRY_CODE = LOCALE.split('_')[1];
+
+    function setTheme() {
+      const params = new URLSearchParams(window.location.search);
+      const theme = params.get('theme') === 'dark' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', theme);
+      return theme;
+    }
+
+    const widgetAPI = {
+      widgetId: null,
+
+      init() {
+        window.onmessage = event => {
+          if (!window.parent || !event.data) {
+            return
+          }
+
+          const request = event.data
+          if (!request.requestId || !request.widgetId || !request.action || request.api !== "toWidget") {
+            return
+          }
+
+          if (this.widgetId) {
+            if (this.widgetId !== request.widgetId) {
+              return
+            }
+          } else {
+            this.widgetId = request.widgetId
+          }
+
+          let response
+
+          if (request.action === "visibility") {
+            response = {}
+          } else if (request.action === "capabilities") {
+            response = { capabilities: ["m.sticker"] }
+          } else {
+            response = { error: { message: "Action not supported" } }
+          }
+
+          window.parent.postMessage({ ...request, response }, event.origin)
+        }
+      },
+
+      sendSticker(content) {
+        const data = {
+          content: { ...content },
+          name: content.body,
+        }
+        delete data.content.id
+
+        const widgetData = {
+          ...data,
+          description: content.body,
+          file: content.filename ?? `${content.id}.png`,
+        }
+        delete widgetData.content.filename
+        delete widgetData.content["net.maunium.telegram.sticker"]
+
+        window.parent.postMessage({
+          api: "fromWidget",
+          action: "m.sticker",
+          requestId: `sticker-${Date.now()}`,
+          widgetId: this.widgetId,
+          data,
+          widgetData,
+        }, "*")
+      }
+    }
+
+    widgetAPI.init();
+    setTheme();
+
+    // Add history management functions
+    const historyManager = {
+      getHistory() {
+        return JSON.parse(localStorage.getItem('gifHistory') || '[]');
+      },
+
+      addToHistory(gif) {
+        let history = this.getHistory();
+        const source = gif.source || (gif.media_formats ? 'tenor' : gif.images ? 'giphy' : 'local');
+        const existingIndex = history.findIndex(item =>
+          item.id === gif.id && item.source === source
+        );
+
+        if (existingIndex !== -1) {
+          history[existingIndex].useCount = (history[existingIndex].useCount || 0) + 1;
+          history[existingIndex].lastUsed = Date.now();
+        } else {
+          history.push({
+            ...gif,
+            source,
+            useCount: 1,
+            lastUsed: Date.now()
+          });
+        }
+
+        localStorage.setItem('gifHistory', JSON.stringify(history));
+      },
+
+      removeFromHistory(gif) {
+        let history = this.getHistory();
+        const source = gif.source || (gif.media_formats ? 'tenor' : gif.images ? 'giphy' : 'local');
+        history = history.filter(item =>
+          !(item.id === gif.id && item.source === source)
+        );
+        localStorage.setItem('gifHistory', JSON.stringify(history));
+      }
+    };
+
+    function calculateEmojiDimensions(width, height) {
+      const maxSize = 32;
+      const aspectRatio = width / height;
+
+      if (width > height) {
+        return {
+          width: maxSize,
+          height: Math.round(maxSize / aspectRatio)
+        };
+      } else {
+        return {
+          width: Math.round(maxSize * aspectRatio),
+          height: maxSize
+        };
+      }
+    }
+
+    // Update size management
+    const sizeManager = {
+      getDefaultSize() {
+        return localStorage.getItem('defaultSize') || '320';
+      },
+
+      setDefaultSize(value) {
+        localStorage.setItem('defaultSize', value);
+      },
+
+      getAskForSize() {
+        return localStorage.getItem('askForSize') === 'true';
+      },
+
+      setAskForSize(value) {
+        localStorage.setItem('askForSize', value);
+      },
+
+      calculateSize(width, height, maxSize) {
+        const aspectRatio = width / height;
+
+        if (maxSize === 'original') {
+          return { width, height };
+        }
+
+        const size = parseInt(maxSize);
+        if (width > height) {
+          return {
+            width: size,
+            height: Math.round(size / aspectRatio)
+          };
+        } else {
+          return {
+            width: Math.round(size * aspectRatio),
+            height: size
+          };
+        }
+      }
+    };
+
+    class GiphySearch extends Component {
+      constructor(props) {
+        super(props);
+        this.state = {
+          error: null,
+          offset: 0,
+        };
+        this.handleGifClick = this.handleGifClick.bind(this);
+        this.handleScroll = this.handleScroll.bind(this);
+      }
+
+      async makeGifSearchRequest() {
+        try {
+          const endpoint = this.props.searchTerm ?
+            `https://api.giphy.com/v1/${this.props.isStickerSearch ? 'stickers' : 'gifs'}/search?limit=50&offset=${this.state.offset}&q=${this.props.searchTerm}&api_key=${GIPHY_API_KEY}&country_code=${COUNTRY_CODE}` :
+            `https://api.giphy.com/v1/${this.props.isStickerSearch ? 'stickers' : 'gifs'}/trending?limit=50&offset=${this.state.offset}&api_key=${GIPHY_API_KEY}&country_code=${COUNTRY_CODE}`;
+
+          const resp = await fetch(endpoint);
+          const data = await resp.json();
+          const gifs = data.data;
+
+          if (gifs.length === 0 && this.state.offset === 0) {
+            this.setState({ error: "No results" });
+            this.props.setResults([]);
+          } else {
+            this.setState({ error: null });
+            this.props.setResults(this.state.offset === 0 ? gifs : [...this.props.results, ...gifs]);
+          }
+        } catch (error) {
+          this.setState({ error: "An error occurred while searching for GIFs." });
+        }
+      }
+
+      componentDidUpdate(prevProps) {
+        if (this.props.searchTerm !== prevProps.searchTerm) {
+          if (this.props.searchTerm) {
+            this.setState({ offset: 0 }, () => this.makeGifSearchRequest());
+          } else {
+            this.props.setResults([]);
+          }
+        }
+      }
+
+      handleGifClick(gif, event) {
+        if (event && event.button === 2) {
+          event.preventDefault();
+          showContextMenu(event, gif);
+          return;
+        }
+
+        if (sizeManager.getAskForSize()) {
+          showSizeMenu(event, gif);
+        } else {
+          sendGif(gif);
+        }
+      }
+
+      handleScroll() {
+        if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 500) {
+          this.setState((prevState) => ({ offset: prevState.offset + 50 }), () => this.makeGifSearchRequest());
+        }
+      }
+
+      componentDidMount() {
+        window.addEventListener('scroll', this.handleScroll);
+      }
+
+      componentWillUnmount() {
+        window.removeEventListener('scroll', this.handleScroll);
+      }
+
+      render() {
+        return h(
+          "div",
+          { class: "search-container" },
+          h("input", {
+            type: "text",
+            onInput: (e) => this.props.setSearchTerm(e.target.value),
+            onKeyUp: (e) => e.key === "Enter" && this.makeGifSearchRequest(),
+            value: this.props.searchTerm,
+            placeholder: `Search ${this.props.isStickerSearch ? "Stickers" : "GIFs"} on Giphy`,
+          }),
+          h(
+            "div",
+            { class: "pack-list" },
+            h("div", { class: "error" }, this.state.error),
+            h(
+              "div",
+              { class: "sticker-list" },
+              this.props.results.map((gif) =>
+                h(
+                  "div",
+                  {
+                    class: "sticker",
+                    onClick: (e) => this.handleGifClick(gif, e),
+                    onContextMenu: (e) => this.handleGifClick(gif, e)
+                  },
+                  h("img", {
+                    src: gif.images.original.webp,
+                    alt: gif.title || "GIF",
+                  })
+                )
+              )
+            )
+          )
+        );
+      }
+    }
+
+    class TenorSearch extends Component {
+      constructor(props) {
+        super(props);
+        this.state = {
+          error: null,
+          pos: 0,
+        };
+        this.handleGifClick = this.handleGifClick.bind(this);
+        this.handleScroll = this.handleScroll.bind(this);
+      }
+
+      async makeGifSearchRequest() {
+        try {
+          const endpoint = this.props.searchTerm ?
+            `https://tenor.googleapis.com/v2/search?limit=50&pos=${this.state.pos}&q=${this.props.searchTerm}&key=${TENOR_API_KEY}&locale=${LOCALE}&country=${COUNTRY_CODE}` :
+            `https://tenor.googleapis.com/v2/featured?key=${TENOR_API_KEY}&locale=${LOCALE}&country=${COUNTRY_CODE}`;
+
+          const resp = await fetch(endpoint);
+          const data = await resp.json();
+          const gifs = data.results;
+
+          if (gifs.length === 0 && this.state.pos === 0) {
+            this.setState({ error: "No results" });
+            this.props.setResults([]);
+          } else {
+            this.setState({ error: null });
+            this.props.setResults(this.state.pos === 0 ? gifs : [...this.props.results, ...gifs]);
+            this.setState({ pos: data.next });
+          }
+        } catch (error) {
+          this.setState({ error: "An error occurred while searching for GIFs." });
+        }
+      }
+
+      componentDidUpdate(prevProps) {
+        if (this.props.searchTerm !== prevProps.searchTerm) {
+          if (this.props.searchTerm) {
+            this.setState({ pos: 0 }, () => this.makeGifSearchRequest());
+          } else {
+            this.props.setResults([]);
+          }
+        }
+      }
+
+      handleGifClick(gif, event) {
+        if (event && event.button === 2) {
+          event.preventDefault();
+          showContextMenu(event, gif, true);
+          return;
+        }
+
+        if (sizeManager.getAskForSize()) {
+          showSizeMenu(event, gif);
+        } else {
+          sendGif(gif);
+        }
+      }
+
+      handleScroll() {
+        if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 500) {
+          this.makeGifSearchRequest();
+        }
+      }
+
+      componentDidMount() {
+        window.addEventListener('scroll', this.handleScroll);
+      }
+
+      componentWillUnmount() {
+        window.removeEventListener('scroll', this.handleScroll);
+      }
+
+      render() {
+        return h(
+          "div",
+          { class: "search-container" },
+          h("input", {
+            type: "text",
+            onInput: (e) => this.props.setSearchTerm(e.target.value),
+            onKeyUp: (e) => e.key === "Enter" && this.makeGifSearchRequest(),
+            value: this.props.searchTerm,
+            placeholder: "Search GIFs on Tenor",
+          }),
+          h(
+            "div",
+            { class: "pack-list" },
+            h("div", { class: "error" }, this.state.error),
+            h(
+              "div",
+              { class: "sticker-list" },
+              this.props.results.map((gif) =>
+                h(
+                  "div",
+                  {
+                    class: "sticker",
+                    onClick: (e) => this.handleGifClick(gif, e),
+                    onContextMenu: (e) => this.handleGifClick(gif, e)
+                  },
+                  h("img", {
+                    src: gif.media_formats.webp.url,
+                    alt: gif.title || "GIF",
+                  })
+                )
+              )
+            )
+          )
+        );
+      }
+    }
+
+    // Add History component
+    class HistoryView extends Component {
+      constructor(props) {
+        super(props);
+        this.state = {
+          history: [],
+        };
+        this.handleGifClick = this.handleGifClick.bind(this);
+      }
+
+      componentDidMount() {
+        this.loadHistory();
+      }
+
+      loadHistory() {
+        const history = historyManager.getHistory()
+          .sort((a, b) => b.useCount - a.useCount);
+        this.setState({ history });
+      }
+
+      handleGifClick(gif, event) {
+        if (event && event.button === 2) {
+          event.preventDefault();
+          showContextMenu(event, gif, gif.source === 'tenor', true);
+          return;
+        }
+
+        if (sizeManager.getAskForSize()) {
+          showSizeMenu(event, gif);
+        } else {
+          sendGif(gif);
+        }
+      }
+
+      render() {
+        return h(
+          "div",
+          { class: "history-container" },
+          h(
+            "div",
+            { class: "sticker-list" },
+            this.state.history.map((gif) =>
+              h(
+                "div",
+                {
+                  class: "sticker",
+                  onClick: (e) => this.handleGifClick(gif, e),
+                  onContextMenu: (e) => this.handleGifClick(gif, e)
+                },
+                h("img", {
+                  src: gif.source === 'tenor' ? gif.media_formats.webp.url :
+                    gif.source === 'local' ? gif.url :
+                      gif.images.original.webp,
+                  alt: gif.title || gif.filename || "GIF",
+                }),
+                h("div", { class: "use-count" }, gif.useCount === 1 ? "Used once" : `Used ${gif.useCount} times`)
+              )
+            )
+          )
+        );
+      }
+    }
+
+    // Add this new component before GifSearchApp
+    class LocalView extends Component {
+      constructor(props) {
+        super(props);
+        this.state = {
+          images: [],
+          error: null
+        };
+        this.handleImageClick = this.handleImageClick.bind(this);
+      }
+
+      componentDidMount() {
+        this.loadLocalImages();
+      }
+
+      async loadLocalImages() {
+        try {
+          const response = await fetch('/api/local', {
+            headers: {
+              'Authorization': `Bearer ${LOCAL_API_BEARER}`
+            }
+          });
+          if (!response.ok) throw new Error('Failed to load local images');
+          const images = await response.json();
+          this.setState({ images });
+        } catch (error) {
+          this.setState({ error: error.message });
+        }
+      }
+
+      handleImageClick(image, event) {
+        if (event && event.button === 2) {
+          event.preventDefault();
+          showContextMenu(event, image, false, false);
+          return;
+        }
+
+        if (sizeManager.getAskForSize()) {
+          showSizeMenu(event, image);
+        } else {
+          sendGif(image);
+        }
+      }
+
+      render() {
+        const { images, error } = this.state;
+
+        return h(
+          "div",
+          { class: "local-container" },
+          error && h("div", { class: "error" }, error),
+          h(
+            "div",
+            { class: "sticker-list" },
+            images.map((image) =>
+              h(
+                "div",
+                {
+                  class: "sticker",
+                  onClick: (e) => this.handleImageClick(image, e),
+                  onContextMenu: (e) => this.handleImageClick(image, e)
+                },
+                h("img", {
+                  src: image.url,
+                  alt: image.filename
+                })
+              )
+            )
+          )
+        );
+      }
+    }
+
+    class GifSearchApp extends Component {
+      constructor(props) {
+        super(props);
+        this.state = {
+          activeTab: this.getDefaultTab(),
+          searchTerm: "",
+          results: [],
+        };
+        this.giphyRef = { current: null };
+        this.giphyStickerRef = { current: null };
+        this.tenorRef = { current: null };
+        this.historyRef = null;
+        this.localRef = null;
+        this.setHistoryRef = (component) => {
+          this.historyRef = component;
+        };
+      }
+
+      componentDidMount() {
+        // Run initial empty searches based on the active tab
+        if (this.state.activeTab === "tenor" && HAS_TENOR_KEY) {
+          this.tenorRef?.current?.makeGifSearchRequest();
+        } else if (this.state.activeTab === "giphy" && HAS_GIPHY_KEY) {
+          this.giphyRef?.current?.makeGifSearchRequest();
+        } else if (this.state.activeTab === "giphy-stickers" && HAS_GIPHY_KEY) {
+          this.giphyStickerRef?.current?.makeGifSearchRequest();
+        }
+      }
+
+      getDefaultTab() {
+        if (HAS_TENOR_KEY) return "tenor";
+        if (HAS_GIPHY_KEY) return "giphy";
+        if (HAS_LOCAL_FILES) return "local";
+        return "history";
+      }
+
+      setActiveTab(tab) {
+        this.setState({ activeTab: tab, results: [] }, () => {
+          if (tab === "history" || tab === "local") return;
+
+          const ref = tab === "giphy" ? this.giphyRef.current :
+                     tab === "giphy-stickers" ? this.giphyStickerRef.current :
+                     this.tenorRef.current;
+
+          if (ref) ref.makeGifSearchRequest();
+        });
+      }
+
+      render() {
+        const { activeTab, searchTerm, results } = this.state;
+
+        return h(
+          "div",
+          null,
+          h(
+            "div",
+            { class: "tab-container" },
+            HAS_GIPHY_KEY && h(
+              "div",
+              {
+                class: `tab ${activeTab === "giphy" ? "active" : ""}`,
+                onClick: () => this.setActiveTab("giphy"),
+              },
+              "Giphy"
+            ),
+            HAS_GIPHY_KEY && h(
+              "div",
+              {
+                class: `tab ${activeTab === "giphy-stickers" ? "active" : ""}`,
+                onClick: () => this.setActiveTab("giphy-stickers"),
+              },
+              "Stickers"
+            ),
+            HAS_TENOR_KEY && h(
+              "div",
+              {
+                class: `tab ${activeTab === "tenor" ? "active" : ""}`,
+                onClick: () => this.setActiveTab("tenor"),
+              },
+              "Tenor"
+            ),
+            h(
+              "div",
+              {
+                class: `tab ${activeTab === "history" ? "active" : ""}`,
+                onClick: () => this.setActiveTab("history"),
+              },
+              "🕒"
+            ),
+            HAS_LOCAL_FILES && h(
+              "div",
+              {
+                class: `tab ${activeTab === "local" ? "active" : ""}`,
+                onClick: () => this.setActiveTab("local"),
+              },
+              "📁"
+            )
+          ),
+          // Modify the render condition to handle missing features
+          activeTab === "history" ? h(HistoryView, { ref: this.setHistoryRef }) :
+            activeTab === "local" && HAS_LOCAL_FILES ? h(LocalView, { ref: (component) => this.localRef = component }) :
+              activeTab === "giphy" && HAS_GIPHY_KEY ? h(GiphySearch, { ref: this.giphyRef, searchTerm, results, setSearchTerm: (term) => this.setState({ searchTerm: term }), setResults: (results) => this.setState({ results }), isStickerSearch: false }) :
+                activeTab === "giphy-stickers" && HAS_GIPHY_KEY ? h(GiphySearch, { ref: this.giphyStickerRef, searchTerm, results, setSearchTerm: (term) => this.setState({ searchTerm: term }), setResults: (results) => this.setState({ results }), isStickerSearch: true }) :
+                  activeTab === "tenor" && HAS_TENOR_KEY ? h(TenorSearch, { ref: this.tenorRef, searchTerm, results, setSearchTerm: (term) => this.setState({ searchTerm: term }), setResults: (results) => this.setState({ results }) }) :
+                    h(HistoryView, { ref: this.setHistoryRef }) // Fallback to history if selected tab is not available
+        );
+      }
+    }
+
+    // Store the app instance when rendering
+    let appInstance = null;
+    const app = h(GifSearchApp, {
+      ref: (component) => {
+        appInstance = component;
+      }
+    });
+    render(app, document.getElementById("app"));
+
+    let lastScrollTop = 0;
+    const bottomBar = document.getElementById('bottomBar');
+
+    // Initialize column preference
+    const columnToggle = document.getElementById('columnToggle');
+    const root = document.documentElement;
+
+    // Load saved preference
+    const singleColumn = localStorage.getItem('singleColumn') === 'true';
+    columnToggle.checked = singleColumn;
+    root.style.setProperty('--grid-columns', singleColumn ? '1' : '2');
+
+    // Handle column toggle
+    columnToggle.addEventListener('change', (e) => {
+      const singleColumn = e.target.checked;
+      root.style.setProperty('--grid-columns', singleColumn ? '1' : '2');
+      localStorage.setItem('singleColumn', singleColumn);
+    });
+
+    // Initialize ask for size preference
+    const askSizeToggle = document.getElementById('askSizeToggle');
+    askSizeToggle.checked = sizeManager.getAskForSize();
+
+    askSizeToggle.addEventListener('change', (e) => {
+      sizeManager.setAskForSize(e.target.checked);
+    });
+
+    window.addEventListener('scroll', () => {
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+      if (scrollTop < lastScrollTop) {
+        bottomBar.classList.add('visible');
+      } else {
+        bottomBar.classList.remove('visible');
+      }
+      lastScrollTop = scrollTop <= 0 ? 0 : scrollTop;
+    });
+
+    document.getElementById('scrollToTopBtn').addEventListener('click', () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    const contextMenu = document.getElementById('contextMenu');
+    const sizeMenu = document.getElementById('sizeMenu');
+    const copyMarkdown = document.getElementById('copyMarkdown');
+    const copyHtml = document.getElementById('copyHtml');
+    const copyGifUrl = document.getElementById('copyGifUrl');
+    const sendAsEmoji = document.getElementById('sendAsEmoji');
+    const deleteHistory = document.getElementById('deleteHistory');
+
+    const giphyDestination = "https://i.giphy.com/%s.webp";
+    const tenorDestination = "https://media.tenor.com/%s/image.webp";
+
+    let currentGif = null;
+
+    function showContextMenu(event, gif, isTenor = false, isHistory = false) {
+      event.preventDefault();
+      if (contextMenu.style.display === 'block') {
+        contextMenu.style.display = 'none';
+        sizeMenu.style.display = 'none';
+        return;
+      }
+      currentGif = gif;
+
+      // Get viewport dimensions
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      // Show menu temporarily to get its dimensions
+      contextMenu.style.visibility = 'hidden';
+      contextMenu.style.display = 'block';
+      const menuWidth = contextMenu.offsetWidth;
+      const menuHeight = contextMenu.offsetHeight;
+
+      // Calculate position
+      let posX = event.clientX;
+      let posY = event.clientY;
+
+      // Adjust horizontal position if menu would go out of viewport
+      if (posX + menuWidth > viewportWidth) {
+        posX = viewportWidth - menuWidth - 5;
+      }
+
+      // Adjust vertical position if menu would go out of viewport
+      if (posY + menuHeight > viewportHeight) {
+        posY = viewportHeight - menuHeight - 5;
+      }
+
+      // Position and show menu
+      contextMenu.style.left = `${posX}px`;
+      contextMenu.style.top = `${posY}px`;
+      document.getElementById('deleteHistory').style.display = isHistory ? 'block' : 'none';
+      contextMenu.style.visibility = 'visible';
+      sizeMenu.style.display = 'none';
+
+      // Update the "Send" option based on the ask for size setting
+      sendAsEmoji.textContent = "Send a different size";
+    }
+
+    function showSizeMenu(event, gif) {
+      event.stopPropagation();
+
+      currentGif = gif;
+
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      sizeMenu.style.display = 'block';
+      const menuWidth = sizeMenu.offsetWidth;
+      const menuHeight = sizeMenu.offsetHeight;
+
+      let posX = event.clientX;
+      let posY = event.clientY;
+
+      if (posX + menuWidth > viewportWidth) {
+        posX = viewportWidth - menuWidth - 5;
+      }
+      if (posY + menuHeight > viewportHeight) {
+        posY = viewportHeight - menuHeight - 5;
+      }
+
+      sizeMenu.style.left = `${posX}px`;
+      sizeMenu.style.top = `${posY}px`;
+
+      contextMenu.style.display = 'none';
+    }
+
+    document.addEventListener('click', () => {
+      contextMenu.style.display = 'none';
+      sizeMenu.style.display = 'none';
+    });
+
+    copyMarkdown.addEventListener('click', () => {
+      if (!currentGif) return;
+      let url;
+      if (currentGif.source === 'local' || currentGif.id?.startsWith('l-')) {
+        url = `mxc://${SERVER_NAME}/${currentGif.id}`;
+      } else if ('media_formats' in currentGif) {
+        const tenorId = currentGif.media_formats.webp.url.split('/').slice(-2, -1)[0];
+        url = `mxc://${SERVER_NAME}/t-${tenorId}`;
+      } else {
+        url = `mxc://${SERVER_NAME}/g-${currentGif.id}`;
+      }
+      const markdown = `![${currentGif.title || currentGif.filename}](${url})`;
+      navigator.clipboard.writeText(markdown);
+    });
+
+    copyHtml.addEventListener('click', () => {
+      if (!currentGif) return;
+      let url, width, height;
+      if (currentGif.source === 'local' || currentGif.id?.startsWith('l-')) {
+        url = `mxc://${SERVER_NAME}/${currentGif.id}`;
+        width = currentGif.width;
+        height = currentGif.height;
+      } else if ('media_formats' in currentGif) {
+        const tenorId = currentGif.media_formats.webp.url.split('/').slice(-2, -1)[0];
+        url = `mxc://${SERVER_NAME}/t-${tenorId}`;
+        width = currentGif.media_formats.webp.dims[0];
+        height = currentGif.media_formats.webp.dims[1];
+      } else {
+        url = `mxc://${SERVER_NAME}/g-${currentGif.id}`;
+        width = currentGif.images.fixed_height.width;
+        height = currentGif.images.fixed_height.height;
+      }
+      const html = `<img src="${url}" alt="${currentGif.title || currentGif.filename}" width="${width}" height="${height}">`;
+      navigator.clipboard.writeText(html);
+    });
+
+    copyGifUrl.addEventListener('click', () => {
+      if (!currentGif) return;
+      let url;
+      if (currentGif.source === 'local' || currentGif.id?.startsWith('l-')) {
+        url = `https://${SERVER_NAME}${GIF_PATH}${currentGif.id}`;  // Update this line
+      } else if ('media_formats' in currentGif) {
+        const tenorId = currentGif.media_formats.webp.url.split('/').slice(-2, -1)[0];
+        url = tenorDestination.replace('%s', tenorId);
+      } else {
+        url = giphyDestination.replace('%s', currentGif.id);
+      }
+      navigator.clipboard.writeText(url);
+    });
+
+    sendAsEmoji.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showSizeMenu(e, currentGif);
+    });
+
+    function sendGif(gif, customSize = null) {
+      let dimensions;
+
+      if (gif.source === 'local' || gif.id?.startsWith('l-')) {
+        dimensions = customSize ?
+          sizeManager.calculateSize(gif.width, gif.height, customSize) :
+          { width: gif.width, height: gif.height };
+        widgetAPI.sendSticker({
+          "info": {
+            "h": dimensions.height,
+            "w": dimensions.width,
+            "mimetype": gif.mimetype,
+          },
+          "body": gif.filename,
+          "msgtype": "m.image",
+          "url": `mxc://${SERVER_NAME}/${gif.id}`,
+          "filename": gif.filename
+        });
+      } else if ('media_formats' in gif) {
+        dimensions = customSize ?
+          sizeManager.calculateSize(gif.media_formats.webp.dims[0], gif.media_formats.webp.dims[1], customSize) :
+          { width: gif.media_formats.webp.dims[0], height: gif.media_formats.webp.dims[1] };
+        const tenorId = gif.media_formats.webp.url.split('/').slice(-2, -1)[0];
+        widgetAPI.sendSticker({
+          "body": gif.title,
+          "info": {
+            "h": dimensions.height,
+            "w": dimensions.width,
+            "mimetype": "image/webp",
+          },
+          "msgtype": "m.image",
+          "url": `mxc://${SERVER_NAME}/t-${tenorId}`,
+          "filename": `${tenorId}.webp`,
+        });
+      } else {
+        dimensions = customSize ?
+          sizeManager.calculateSize(gif.images.fixed_height.width, gif.images.fixed_height.height, customSize) :
+          { width: gif.images.original.width, height: gif.images.original.height };
+        widgetAPI.sendSticker({
+          "body": gif.title,
+          "info": {
+            "h": dimensions.height,
+            "w": dimensions.width,
+            "mimetype": "image/webp",
+          },
+          "msgtype": "m.image",
+          "url": `mxc://${SERVER_NAME}/g-${gif.id}`,
+          "filename": `${gif.id}.webp`,
+        });
+      }
+      historyManager.addToHistory(gif);
+      sizeMenu.style.display = 'none';
+    }
+
+    sizeMenu.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const target = e.target.closest('[data-size]');
+      if (!target || !currentGif) return;
+
+      const size = target.dataset.size;
+      sendGif(currentGif, size);
+      sizeMenu.style.display = 'none';
+    });
+
+    // Add a new event listener to hide menus when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!contextMenu.contains(e.target) && !sizeMenu.contains(e.target)) {
+        contextMenu.style.display = 'none';
+        sizeMenu.style.display = 'none';
+      }
+    });
+
+    // Add delete handler
+    deleteHistory.addEventListener('click', () => {
+      if (!currentGif) return;
+      historyManager.removeFromHistory(currentGif);
+      appInstance?.historyRef?.loadHistory();
+    });
+  </script>
+</body>
+
+</html>
