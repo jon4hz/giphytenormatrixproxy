@@ -96,10 +96,7 @@
   <script type="module">
     import { h, render, Component } from "https://unpkg.com/htm/preact/standalone.module.js";
 
-    // Check if template variables are unrendered (still contain {{.}})
     var SERVER_NAME = "{{.ServerName}}";
-    var GIPHY_API_KEY = "{{.GiphyAPIKey}}";
-    var TENOR_API_KEY = "{{.TenorAPIKey}}";
     var HAS_LOCAL_FILES = {{.HasLocalFiles }};
     var HAS_GIPHY_KEY = {{.HasGiphyKey}};
     var HAS_TENOR_KEY = {{.HasTenorKey}};
@@ -289,10 +286,12 @@
 
       async makeGifSearchRequest() {
         try {
-          const endpoint = this.props.searchTerm ?
-            `https://api.giphy.com/v1/${this.props.isStickerSearch ? 'stickers' : 'gifs'}/search?limit=50&offset=${this.state.offset}&q=${this.props.searchTerm}&api_key=${GIPHY_API_KEY}&country_code=${COUNTRY_CODE}` :
-            `https://api.giphy.com/v1/${this.props.isStickerSearch ? 'stickers' : 'gifs'}/trending?limit=50&offset=${this.state.offset}&api_key=${GIPHY_API_KEY}&country_code=${COUNTRY_CODE}`;
-
+          let endpoint;
+          if (this.props.searchTerm) {
+            endpoint = `/api/giphy/search?q=${encodeURIComponent(this.props.searchTerm)}&offset=${this.state.offset}&stickers=${this.props.isStickerSearch}&country=${COUNTRY_CODE}`;
+          } else {
+            endpoint = `/api/giphy/trending?offset=${this.state.offset}&stickers=${this.props.isStickerSearch}&country=${COUNTRY_CODE}`;
+          }
           const resp = await fetch(endpoint);
           const data = await resp.json();
           const gifs = data.data;
@@ -398,10 +397,12 @@
 
       async makeGifSearchRequest() {
         try {
-          const endpoint = this.props.searchTerm ?
-            `https://tenor.googleapis.com/v2/search?limit=50&pos=${this.state.pos}&q=${this.props.searchTerm}&key=${TENOR_API_KEY}&locale=${LOCALE}&country=${COUNTRY_CODE}` :
-            `https://tenor.googleapis.com/v2/featured?key=${TENOR_API_KEY}&locale=${LOCALE}&country=${COUNTRY_CODE}`;
-
+          let endpoint;
+          if (this.props.searchTerm) {
+            endpoint = `/api/tenor/search?q=${encodeURIComponent(this.props.searchTerm)}&pos=${this.state.pos}&locale=${LOCALE}&country=${COUNTRY_CODE}`;
+          } else {
+            endpoint = `/api/tenor/featured?locale=${LOCALE}&country=${COUNTRY_CODE}`;
+          }
           const resp = await fetch(endpoint);
           const data = await resp.json();
           const gifs = data.results;

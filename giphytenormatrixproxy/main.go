@@ -29,9 +29,11 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
+	"io"
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -87,14 +89,6 @@ var (
 	localImagesCacheTTL = 5 * time.Minute // Configure cache TTL
 	localImagesCacheMu  sync.RWMutex
 )
-
-func loggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		next.ServeHTTP(w, r)
-		log.Printf("%s %s %s", r.Method, r.RequestURI, time.Since(start))
-	})
-}
 
 func getAllIPs() []string {
 	ifaces, err := net.Interfaces()
@@ -212,13 +206,6 @@ func listLocalImages(storagePath string) ([]LocalImage, error) {
 	return images, nil
 }
 
-// Add a function to invalidate the cache when needed
-func invalidateLocalImagesCache() {
-	localImagesCacheMu.Lock()
-	localImagesCache = nil
-	localImagesCacheMu.Unlock()
-}
-
 func generateRandomBearer() string {
 	b := make([]byte, 32)
 	_, err := rand.Read(b)
@@ -265,8 +252,6 @@ func main() {
 
 			data := struct {
 				ServerName     string
-				GiphyAPIKey    string
-				TenorAPIKey    string
 				HasLocalFiles  bool
 				HasGiphyKey    bool
 				HasTenorKey    bool
@@ -275,8 +260,6 @@ func main() {
 				Locale         string
 			}{
 				ServerName:     cfg.ServerName,
-				GiphyAPIKey:    cfg.GiphyAPIKey,
-				TenorAPIKey:    cfg.TenorAPIKey,
 				HasLocalFiles:  false,
 				HasGiphyKey:    cfg.GiphyAPIKey != "",
 				HasTenorKey:    cfg.TenorAPIKey != "",
@@ -364,6 +347,164 @@ func main() {
 			}
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(images)
+		})
+
+		// --- Giphy Proxy Endpoints ---
+		router.HandleFunc("/api/giphy/search", func(w http.ResponseWriter, r *http.Request) {
+			q := r.URL.Query().Get("q")
+			offset := r.URL.Query().Get("offset")
+			limit := r.URL.Query().Get("limit")
+			stickers := r.URL.Query().Get("stickers")
+			country := r.URL.Query().Get("country")
+			if limit == "" {
+				limit = "50"
+			}
+			if offset == "" {
+				offset = "0"
+			}
+			isStickers := stickers == "true"
+			basePath := map[bool]string{true: "stickers", false: "gifs"}[isStickers]
+
+			u := url.URL{
+				Scheme: "https",
+				Host:   "api.giphy.com",
+				Path:   fmt.Sprintf("/v1/%s/search", basePath),
+			}
+			params := url.Values{}
+			params.Set("limit", limit)
+			params.Set("offset", offset)
+			params.Set("q", q)
+			params.Set("api_key", cfg.GiphyAPIKey)
+			if country != "" {
+				params.Set("country_code", country)
+			}
+			u.RawQuery = params.Encode()
+
+			resp, err := http.Get(u.String())
+			if err != nil {
+				http.Error(w, "Failed to fetch from Giphy", http.StatusBadGateway)
+				return
+			}
+			defer resp.Body.Close()
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(resp.StatusCode)
+			io.Copy(w, resp.Body)
+		})
+
+		router.HandleFunc("/api/giphy/trending", func(w http.ResponseWriter, r *http.Request) {
+			offset := r.URL.Query().Get("offset")
+			limit := r.URL.Query().Get("limit")
+			stickers := r.URL.Query().Get("stickers")
+			country := r.URL.Query().Get("country")
+			if limit == "" {
+				limit = "50"
+			}
+			if offset == "" {
+				offset = "0"
+			}
+			isStickers := stickers == "true"
+			basePath := map[bool]string{true: "stickers", false: "gifs"}[isStickers]
+
+			u := url.URL{
+				Scheme: "https",
+				Host:   "api.giphy.com",
+				Path:   fmt.Sprintf("/v1/%s/trending", basePath),
+			}
+			params := url.Values{}
+			params.Set("limit", limit)
+			params.Set("offset", offset)
+			params.Set("api_key", cfg.GiphyAPIKey)
+			if country != "" {
+				params.Set("country_code", country)
+			}
+			u.RawQuery = params.Encode()
+
+			resp, err := http.Get(u.String())
+			if err != nil {
+				http.Error(w, "Failed to fetch from Giphy", http.StatusBadGateway)
+				return
+			}
+			defer resp.Body.Close()
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(resp.StatusCode)
+			io.Copy(w, resp.Body)
+		})
+
+		// --- Tenor Proxy Endpoints ---
+		router.HandleFunc("/api/tenor/search", func(w http.ResponseWriter, r *http.Request) {
+			q := r.URL.Query().Get("q")
+			pos := r.URL.Query().Get("pos")
+			limit := r.URL.Query().Get("limit")
+			locale := r.URL.Query().Get("locale")
+			country := r.URL.Query().Get("country")
+			if limit == "" {
+				limit = "50"
+			}
+
+			u := url.URL{
+				Scheme: "https",
+				Host:   "tenor.googleapis.com",
+				Path:   "/v2/search",
+			}
+			params := url.Values{}
+			params.Set("limit", limit)
+			params.Set("q", q)
+			params.Set("key", cfg.TenorAPIKey)
+			if pos != "" {
+				params.Set("pos", pos)
+			}
+			if locale != "" {
+				params.Set("locale", locale)
+			}
+			if country != "" {
+				params.Set("country", country)
+			}
+			u.RawQuery = params.Encode()
+
+			resp, err := http.Get(u.String())
+			if err != nil {
+				http.Error(w, "Failed to fetch from Tenor", http.StatusBadGateway)
+				return
+			}
+			defer resp.Body.Close()
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(resp.StatusCode)
+			io.Copy(w, resp.Body)
+		})
+
+		router.HandleFunc("/api/tenor/featured", func(w http.ResponseWriter, r *http.Request) {
+			limit := r.URL.Query().Get("limit")
+			locale := r.URL.Query().Get("locale")
+			country := r.URL.Query().Get("country")
+			if limit == "" {
+				limit = "50"
+			}
+
+			u := url.URL{
+				Scheme: "https",
+				Host:   "tenor.googleapis.com",
+				Path:   "/v2/featured",
+			}
+			params := url.Values{}
+			params.Set("key", cfg.TenorAPIKey)
+			params.Set("limit", limit)
+			if locale != "" {
+				params.Set("locale", locale)
+			}
+			if country != "" {
+				params.Set("country", country)
+			}
+			u.RawQuery = params.Encode()
+
+			resp, err := http.Get(u.String())
+			if err != nil {
+				http.Error(w, "Failed to fetch from Tenor", http.StatusBadGateway)
+				return
+			}
+			defer resp.Body.Close()
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(resp.StatusCode)
+			io.Copy(w, resp.Body)
 		})
 
 		mp, err := mediaproxy.NewFromConfig(cfg.BasicConfig, getMedia)
