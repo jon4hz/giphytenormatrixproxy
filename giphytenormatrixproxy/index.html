@@ -4,21 +4,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GIF Search Tabs</title>
+  <title>GIF Picker for Element</title>
   <script src="https://unpkg.com/htm/preact/standalone.module.js" type="module"></script>
   <link rel="stylesheet" href="styles.css">
 </head>
 
 <body>
-  <div class="title-container">
-    <div class="title">PiX's finest GIF picker</div>
-  </div>
-  <div id="app"></div>
-  <div class="bottom-hover-area"></div>
-  <div class="bottom-bar" id="bottomBar">
+  <main>
+    <div id="app"></div>
+  </main>
+  <div class="bottom-bar" id="bottomBar" role="navigation" aria-label="Bottom bar">
     <div class="settings-container">
-      <button id="settingsBtn">⚙️</button>
-      <div class="settings-menu">
+      <button id="settingsBtn" aria-label="Settings">⚙️</button>
+      <div class="settings-menu" aria-label="Settings menu">
         <label>
           <input type="checkbox" id="columnToggle">
           Single&nbsp;Column
@@ -29,16 +27,16 @@
         </label>
       </div>
     </div>
-    <button id="scrollToTopBtn">Scroll to Top</button>
+    <button id="scrollToTopBtn" aria-label="Scroll to top">Scroll to Top</button>
   </div>
-  <div id="contextMenu" class="context-menu">
+  <div id="contextMenu" class="context-menu" role="menu">
     <div class="context-menu-item" id="copyMarkdown">Copy mxc:// markdown</div>
     <div class="context-menu-item" id="copyHtml">Copy mxc:// HTML</div>
     <div class="context-menu-item" id="copyGifUrl">Copy GIF real URL</div>
     <div class="context-menu-item" id="sendAsEmoji">Send</div>
     <div class="context-menu-item" id="deleteHistory" style="display: none">Delete from history</div>
   </div>
-  <div id="sizeMenu" class="context-menu size-menu">
+  <div id="sizeMenu" class="context-menu size-menu" role="menu">
     <div class="size-grid">
       <div class="context-menu-item" data-size="original"><small>Original</small></div>
       <div class="context-menu-item" data-size="512"><small>512px</small></div>
@@ -51,47 +49,6 @@
       <div class="context-menu-item" data-size="24"><small>24px</small></div>
     </div>
   </div>
-
-  <style>
-    .context-menu {
-      display: none;
-      position: fixed;
-      z-index: 1000;
-      background: var(--bg-color);
-      border: 1px solid var(--border-color);
-      border-radius: 4px;
-      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-    }
-
-    .size-menu {
-      padding: 4px;
-    }
-
-    .size-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 2px;
-    }
-
-    .size-grid .context-menu-item {
-      padding: 4px 8px;
-      text-align: center;
-      min-width: 40px;
-      font-size: 0.9em;
-    }
-
-    .context-menu-item {
-      padding: 8px 12px;
-      cursor: pointer;
-      transition: background-color 0.2s ease;
-      color: var(--text-color);
-    }
-
-    .context-menu-item:hover {
-      background-color: var(--menu-active-bg);
-      color: var(--menu-active-fg);
-    }
-  </style>
 
   <script type="module">
     import { h, render, Component } from "https://unpkg.com/htm/preact/standalone.module.js";
@@ -1013,6 +970,29 @@
       if (!currentGif) return;
       historyManager.removeFromHistory(currentGif);
       appInstance?.historyRef?.loadHistory();
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const settingsBtn = document.getElementById('settingsBtn');
+      const settingsContainer = settingsBtn.closest('.settings-container');
+      const settingsMenu = settingsContainer.querySelector('.settings-menu');
+
+      function closeSettingsMenu(e) {
+        if (!settingsContainer.contains(e.target)) {
+          settingsContainer.classList.remove('open');
+          document.removeEventListener('mousedown', closeSettingsMenu);
+        }
+      }
+
+      settingsBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        settingsContainer.classList.toggle('open');
+        if (settingsContainer.classList.contains('open')) {
+          document.addEventListener('mousedown', closeSettingsMenu);
+        } else {
+          document.removeEventListener('mousedown', closeSettingsMenu);
+        }
+      });
     });
   </script>
 </body>
