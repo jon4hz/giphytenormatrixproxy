@@ -519,7 +519,6 @@ func main() {
 			log.Fatalf("Error creating media proxy: %s", err)
 		}
 		mp.KeyServer.Version.Name = "giphytenormatrixproxy - tenor giphy proxy"
-		mp.ForceProxyLegacyFederation = true
 		if cfg.Destination != "" {
 			giphyDestination = cfg.Destination
 		}
